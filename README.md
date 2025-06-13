@@ -19,7 +19,7 @@ sudo apt install libncurses5-dev libncursesw5-dev
 //user download경로에 따라 다릅니다 
 
 cd snake && cd snake_game&&make
-
+(.cpp와 .h만 남길 경우, make clean)
 ./snake
 
 움직이는 방법 카트라이더와 같이 방향키와 같음 단 머리와 꼬리가 부딪히면 안되고 움직이는 방향의 반대가 되면 안된다.
