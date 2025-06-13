@@ -12,9 +12,9 @@ private:
 
 public:
     void init(int y, int x);
-    bool updateDirection(int input);  // return false if fail
-    bool move(Map& map);  // 이동, 실패하면 false 반환
+    bool updateDirection(int input);  // true if success, false if game over
+    bool move(Map& map);
     void render() const;
+    Direction getDirection() const;   // 현재 방향 getter
 };
-
 

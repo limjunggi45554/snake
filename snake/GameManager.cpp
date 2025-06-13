@@ -2,8 +2,8 @@
 #include "Map.h"
 #include "Snake.h"
 #include <ncurses.h>
-#include <unistd.h>  // usleep
-#include <iostream>
+#include <unistd.h>
+
 void GameManager::run() {
     initscr();
     noecho();
@@ -18,29 +18,37 @@ void GameManager::run() {
     Snake snake;
     snake.init(10, 10);
 
-    const int tick_ms = 300000;  // 300ms
+    const int tick_ms = 150 * 1000;
+
     while (true) {
         clear();
         map.render();
         snake.render();
 
         int ch = getch();
-        if (ch != ERR) 
-                if (!snake.updateDirection(ch)) 
-                	break;  // 반대방향 → 게임 종료
-        if (!snake.move(map)) break;
+        if (ch != ERR) {
+            Direction currentDir = snake.getDirection();
+            Direction inputDir;
+            switch (ch) {
+                case KEY_UP:    inputDir = UP; break;
+                case KEY_DOWN:  inputDir = DOWN; break;
+                case KEY_LEFT:  inputDir = LEFT; break;
+                case KEY_RIGHT: inputDir = RIGHT; break;
+                default: inputDir = currentDir; break;
+            }
+
+            if (inputDir != currentDir) {
+                if (!snake.updateDirection(ch)) break;  // 반대 방향 → 종료
+            }
+        }
+
+        if (!snake.move(map)) break;  // 충돌 → 종료
 
         refresh();
         usleep(tick_ms);
     }
 
-    // 종료 메시지 표시 및 대기
-    clear();
-    mvprintw(10, 10, "Game Over! Press any key to exit.");
-    refresh();
-    nodelay(stdscr, FALSE);  // 입력 대기 모드
-    getch();
     endwin();
+    printf("Game Over\n");
 }
-
 
