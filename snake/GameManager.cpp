@@ -19,15 +19,15 @@ void GameManager::run() {
     snake.init(10, 10);
 
     const int tick_ms = 300000;  // 300ms
-
     while (true) {
         clear();
         map.render();
         snake.render();
 
         int ch = getch();
-        if (ch != ERR) snake.updateDirection(ch);
-
+        if (ch != ERR) 
+                if (!snake.updateDirection(ch)) 
+                	break;  // 반대방향 → 게임 종료
         if (!snake.move(map)) break;
 
         refresh();
