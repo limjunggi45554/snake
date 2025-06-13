@@ -13,7 +13,6 @@ void Snake::init(int y, int x) {
     direction = RIGHT;
 }
 
-
 void Snake::render() const {
     for (size_t i = 0; i < body.size(); ++i) {
         int y = body[i].first;
@@ -32,28 +31,34 @@ bool Snake::move(Map& map) {
 
     int cell = map.getValue(newY, newX);
 
-    if (cell == WALL || cell == IMMUNE_WALL || cell == SNAKE_BODY)
+    // 🔴 자기 몸통 충돌 검사
+    for (const auto& segment : body) {
+        if (segment.first == newY && segment.second == newX)
+            return false;
+    }
+
+    if (cell == WALL || cell == IMMUNE_WALL)
         return false;
 
     body.push_front({newY, newX});
 
     if (cell == GROWTH_ITEM) {
-        map.setValue(newY, newX, EMPTY); // grow (no tail removal)
+        map.setValue(newY, newX, EMPTY);
+        map.addItem(GROWTH_ITEM);  // 바로 리젠
     } else if (cell == POISON_ITEM) {
         map.setValue(newY, newX, EMPTY);
+        map.addItem(POISON_ITEM);  // 바로 리젠
         if (body.size() > 1) body.pop_back();
         if (body.size() > 1) body.pop_back();
     } else {
-        body.pop_back(); // normal move
+        body.pop_back();
     }
 
-    // 길이가 3보다 작아지면 게임 종료
     if (body.size() < 3)
         return false;
 
     return true;
 }
-
 
 bool Snake::updateDirection(int key) {
     Direction newDir = direction;

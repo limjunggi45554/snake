@@ -45,8 +45,8 @@ void GameManager::run() {
 
         if (!snake.move(map)) break;  // 충돌 등으로 종료
 
-        // ✅ 매 30프레임마다 아이템 초기화 및 추가
-        if (frame % 30 == 0) {
+        // ✅ 매 100프레임마다 아이템 초기화 및 추가
+        if (frame % 100 == 0) {
             map.clearItems();                      // 이전 아이템 제거
             map.addItem(GROWTH_ITEM);              // G 아이템 추가
             map.addItem(POISON_ITEM);              // P 아이템 추가
