@@ -26,5 +26,8 @@ public:
     void clearItems();      // 아이템 제거
     std::vector<std::pair<int, int>> getWallPositions() const;
     void clearItem(int itemType);
+    std::vector<std::pair<int,int>> getEmptyPositions() const;
+    int getHeight() const { return height; }
+
 };
 

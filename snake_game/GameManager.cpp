@@ -207,5 +207,3 @@ bool GameManager::checkMissionClear(const Snake& snake) const {
            poisonCount >= 2 &&
            gateUseCount >= 1;
 }
-
-

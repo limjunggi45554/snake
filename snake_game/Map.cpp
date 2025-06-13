@@ -107,5 +107,17 @@ void Map::clearItem(int itemType) {
         }
     }
 }
+// Map.cpp
+std::vector<std::pair<int,int>> Map::getEmptyPositions() const {
+    std::vector<std::pair<int,int>> empties;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (mapData[y][x] == EMPTY) {
+                empties.emplace_back(y, x);
+            }
+        }
+    }
+    return empties;
+}
 
 
