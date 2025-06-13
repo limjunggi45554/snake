@@ -14,6 +14,10 @@ sudo apt update
 
 sudo apt install libncurses5-dev libncursesw5-dev
 
+실행방법 
+
+//user download경로에 따라 다릅니다 
+
 cd snake && cd snake_game&&make
 
 ./snake
