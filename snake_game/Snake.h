@@ -29,5 +29,7 @@ public:
     void setGateInfo(std::pair<int, int> g1, std::pair<int, int> g2);
     std::pair<int, int> getGateExitPosition(const Map& map, std::pair<int, int> gate);
     int getLength() const;
+    const std::deque<std::pair<int,int>>& getBody() const;
+
 };
 

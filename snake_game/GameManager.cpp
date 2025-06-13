@@ -7,6 +7,28 @@
 #include <ctime>
 #include <iostream>
 
+void GameManager::addItemAvoidSnake(int itemType, const Snake& snake) {
+    auto snakeBody = snake.getBody(); // std::deque<std::pair<int,int>> 형태로 뱀 몸통 좌표 반환
+    int y, x;
+    for (int tries = 0; tries < 100; ++tries) {
+        y = rand() % map.getHeight();
+        x = rand() % map.getWidth();
+        if (map.getValue(y, x) == EMPTY) {
+            bool onSnake = false;
+            for (auto& segment : snakeBody) {
+                if (segment.first == y && segment.second == x) {
+                    onSnake = true;
+                    break;
+                }
+            }
+            if (!onSnake) {
+                map.setValue(y, x, itemType);
+                break;
+            }
+        }
+    }
+}
+
 void GameManager::run() {
     initscr();
     noecho();
@@ -15,7 +37,7 @@ void GameManager::run() {
     curs_set(0);
     nodelay(stdscr, TRUE);
 
-    while (true) {  // 게임 전체 재시작 루프
+    while (true) {
         int currentStage = 1;
         map.loadStage(currentStage);
 
@@ -33,49 +55,50 @@ void GameManager::run() {
         const int tick_ms = 150 * 1000;
         int frame = 0;
 
-        map.addItem(GROWTH_ITEM);
-        map.addItem(POISON_ITEM);
+        map.clearItems();
+        addItemAvoidSnake(GROWTH_ITEM, snake);
+        addItemAvoidSnake(POISON_ITEM, snake);
         generateGates();
         snake.setGateInfo(gate1, gate2);
+
         clear();
         map.render();
         snake.render();
         renderScoreBoard(snake);
-        mvprintw(15, 30, "Stage%d 2second later start ..", currentStage);
+        mvprintw(15, 30, "Stage %d 2 seconds later start...", currentStage);
         refresh();
         sleep(2);
 
         bool gameOver = false;
 
         while (!gameOver) {
-		clear();
-		map.render();
-		snake.render();
-		renderScoreBoard(snake);
-		int ch = getch();
-		while (ch != ERR) {
-			Direction currentDir = snake.getDirection();
-			Direction inputDir = currentDir;
-			switch (ch) {
-				case KEY_UP:    inputDir = UP; break;
-				case KEY_DOWN:  inputDir = DOWN; break;
-				case KEY_LEFT:  inputDir = LEFT; break;
-				case KEY_RIGHT: inputDir = RIGHT; break;
-				default:        inputDir = currentDir; break;
-			}
+            clear();
+            map.render();
+            snake.render();
+            renderScoreBoard(snake);
 
-			if (inputDir != currentDir) {
-				bool ok = snake.updateDirection(ch);
-				if (!ok) {
-					// 반대 방향 입력시 종료 처리
-					gameOver = true;  // bool gameOver 변수 있어야 함
-					break;
-				}
-				break;  // 방향 변경 성공 시 루프 탈출
-			}
-			ch = getch();
+            int ch = getch();
+            while (ch != ERR) {
+                Direction currentDir = snake.getDirection();
+                Direction inputDir = currentDir;
+                switch (ch) {
+                    case KEY_UP:    inputDir = UP; break;
+                    case KEY_DOWN:  inputDir = DOWN; break;
+                    case KEY_LEFT:  inputDir = LEFT; break;
+                    case KEY_RIGHT: inputDir = RIGHT; break;
+                    default:        inputDir = currentDir; break;
+                }
+
+                if (inputDir != currentDir) {
+                    bool ok = snake.updateDirection(ch);
+                    if (!ok) {
+                        gameOver = true;
+                        break;
+                    }
+                    break;
+                }
+                ch = getch();
             }
-
 
             Snake::MoveResult result = snake.move(map);
 
@@ -97,13 +120,13 @@ void GameManager::run() {
                 default:
                     break;
             }
-            if (snake.getLength() > maxLength) {
-            	mvprintw(18, 30, "Max length reached! Game Over!");
-            	refresh();
-            	sleep(1);
-            	gameOver = true;
-            }
 
+            if (snake.getLength() >= maxLength) {
+                mvprintw(18, 30, "Max length reached! Game Over!");
+                refresh();
+                sleep(2);
+                gameOver = true;
+            }
 
             if (checkMissionClear(snake)) {
                 if (currentStage >= 5) {
@@ -127,6 +150,8 @@ void GameManager::run() {
 
                     currentStage++;
                     map.loadStage(currentStage);
+
+                    // 뱀 시작 위치 새로 정하기 (예: 10, 10 또는 빈 공간 랜덤 등)
                     snake.init(10, 10);
 
                     growthCount = 0;
@@ -136,19 +161,19 @@ void GameManager::run() {
                     lastPoisonItemTime = time(nullptr);
 
                     map.clearItems();
-                    map.addItem(GROWTH_ITEM);
-                    map.addItem(POISON_ITEM);
+                    addItemAvoidSnake(GROWTH_ITEM, snake);
+                    addItemAvoidSnake(POISON_ITEM, snake);
                     generateGates();
                     snake.setGateInfo(gate1, gate2);
 
                     frame = 0;
                     startTime = time(nullptr);
-                    
+
                     clear();
                     map.render();
                     snake.render();
                     renderScoreBoard(snake);
-                    mvprintw(15, 30, "Stage%d 2second later start ..", currentStage);
+                    mvprintw(15, 30, "Stage %d 2 seconds later start...", currentStage);
                     refresh();
                     sleep(2);
                 }
@@ -158,13 +183,13 @@ void GameManager::run() {
 
             if (now - lastGrowthItemTime >= 10) {
                 map.clearItem(GROWTH_ITEM);
-                map.addItem(GROWTH_ITEM);
+                addItemAvoidSnake(GROWTH_ITEM, snake);
                 lastGrowthItemTime = now;
             }
 
             if (now - lastPoisonItemTime >= 10) {
                 map.clearItem(POISON_ITEM);
-                map.addItem(POISON_ITEM);
+                addItemAvoidSnake(POISON_ITEM, snake);
                 lastPoisonItemTime = now;
             }
 
@@ -185,9 +210,8 @@ void GameManager::run() {
         } while (choice != 'Y' && choice != 'y' && choice != 'N' && choice != 'n');
 
         if (choice == 'N' || choice == 'n') {
-            break;  // 루프 탈출해서 run() 종료 -> 게임 끝
+            break;
         }
-        // 'Y'면 루프 반복 -> 게임 재시작
     }
 
     endwin();

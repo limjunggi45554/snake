@@ -2,6 +2,7 @@
 #include "Map.h"
 #include <ncurses.h>
 #include <tuple>
+#include <deque>
 
 const int dy[4] = {-1, 1, 0, 0}; // UP, DOWN
 const int dx[4] = {0, 0, -1, 1}; // LEFT, RIGHT
@@ -155,5 +156,7 @@ std::pair<int, int> Snake::getGateExitPosition(const Map& map, std::pair<int, in
 int Snake::getLength() const {
     return body.size();
 }
-
+const std::deque<std::pair<int,int>>& Snake::getBody() const {
+    return body;
+}
 

@@ -27,6 +27,7 @@ public:
     std::vector<std::pair<int, int>> getWallPositions() const;
     void clearItem(int itemType);
     std::vector<std::pair<int,int>> getEmptyPositions() const;
+    int getWidth() const {return width; }
     int getHeight() const { return height; }
 
 };

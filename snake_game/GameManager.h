@@ -23,5 +23,6 @@ private:
     time_t startTime;
     time_t lastGrowthItemTime = 0;
     time_t lastPoisonItemTime = 0;
+    void addItemAvoidSnake(int itemType, const Snake& snake);
 
 };
