@@ -5,38 +5,79 @@
 
 const int WIDTH = 21;
 const int HEIGHT = 21;
+const int INITIAL_LENGTH = 3; // head + tail segments
+const int TICK_MS = 200;
 
 enum Direction { UP, DOWN, LEFT, RIGHT };
 
 struct Point { int x, y; };
 
-int main() {
-    // 초기화
-    initscr();            // ncurses 시작
-    cbreak();             // 라인 버퍼링 비활성
-    noecho();             // 입력 키 보여주지 않음
-    keypad(stdscr, TRUE); // 방향키 인식
-    nodelay(stdscr, TRUE);// getch() 논블로킹
-    curs_set(0);          // 커서 숨김
+bool isOpposite(Direction d1, Direction d2) {
+    return (d1 == UP && d2 == DOWN) || (d1 == DOWN && d2 == UP) ||
+           (d1 == LEFT && d2 == RIGHT) || (d1 == RIGHT && d2 == LEFT);
+}
 
-    // 초기 뱀 위치 및 방향
-    Point head = { WIDTH/2, HEIGHT/2 };
+int main() {
+    initscr();            // ncurses start
+    cbreak();             // disable line buffering
+    noecho();             // do not echo input
+    keypad(stdscr, TRUE); // enable arrow keys
+    nodelay(stdscr, TRUE);// non-blocking getch
+    curs_set(0);          // hide cursor
+
+    // Initialize snake in center, horizontal to the left
+    std::vector<Point> snake;
+    int startX = WIDTH / 2;
+    int startY = HEIGHT / 2;
+    for (int i = 0; i < INITIAL_LENGTH; ++i) {
+        snake.push_back({ startX - i, startY });
+    }
     Direction dir = RIGHT;
 
     bool running = true;
     while (running) {
-        // 입력 처리
         int ch = getch();
+        Direction newDir = dir;
         switch (ch) {
-            case KEY_UP:    if (dir != DOWN)  dir = UP;    break;
-            case KEY_DOWN:  if (dir != UP)    dir = DOWN;  break;
-            case KEY_LEFT:  if (dir != RIGHT) dir = LEFT;  break;
-            case KEY_RIGHT: if (dir != LEFT)  dir = RIGHT; break;
-            case 'q': running = false;                  break;
+            case KEY_UP:    newDir = UP;    break;
+            case KEY_DOWN:  newDir = DOWN;  break;
+            case KEY_LEFT:  newDir = LEFT;  break;
+            case KEY_RIGHT: newDir = RIGHT; break;
+            case 'q': running = false;     break;
+        }
+        // ignore reverse direction and same direction
+        if (!isOpposite(dir, newDir) && newDir != dir) {
+            dir = newDir;
         }
 
-        // 지도 그리기
+        // compute new head
+        Point head = snake.front();
+        Point newHead = head;
+        switch (dir) {
+            case UP:    newHead.y--; break;
+            case DOWN:  newHead.y++; break;
+            case LEFT:  newHead.x--; break;
+            case RIGHT: newHead.x++; break;
+        }
+        // collision with wall
+        if (newHead.x <= 0 || newHead.x >= WIDTH-1 || newHead.y <= 0 || newHead.y >= HEIGHT-1) {
+            running = false;
+        }
+        // collision with self
+        for (auto &p : snake) {
+            if (p.x == newHead.x && p.y == newHead.y) {
+                running = false;
+                break;
+            }
+        }
+        if (!running) break;
+
+        // move snake: add new head, remove tail
+        snake.insert(snake.begin(), newHead);
+        snake.pop_back();
+
         clear();
+        // draw walls
         for (int x = 0; x < WIDTH; ++x) {
             mvaddch(0, x, '#');
             mvaddch(HEIGHT-1, x, '#');
@@ -45,26 +86,22 @@ int main() {
             mvaddch(y, 0, '#');
             mvaddch(y, WIDTH-1, '#');
         }
-
-        // 뱀 이동
-        switch (dir) {
-            case UP:    head.y = (head.y > 1) ? head.y - 1 : HEIGHT-2; break;
-            case DOWN:  head.y = (head.y < HEIGHT-2) ? head.y + 1 : 1; break;
-            case LEFT:  head.x = (head.x > 1) ? head.x - 1 : WIDTH-2; break;
-            case RIGHT: head.x = (head.x < WIDTH-2) ? head.x + 1 : 1; break;
+        // draw snake
+        for (size_t i = 0; i < snake.size(); ++i) {
+            char c = (i == 0 ? 'O' : 'o');
+            mvaddch(snake[i].y, snake[i].x, c);
         }
-
-        // 뱀 그리기 (머리만)
-        mvaddch(head.y, head.x, 'O');
-
-        // 화면 갱신
         refresh();
-
-        // 속도 조절
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(TICK_MS));
     }
 
-    // 종료 처리
+    // game over screen
+    nodelay(stdscr, FALSE);
+    mvprintw(HEIGHT/2, (WIDTH-9)/2, "Game Over!");
+    mvprintw(HEIGHT/2+1, (WIDTH-19)/2, "Press any key to exit.");
+    refresh();
+    getch();
+
     endwin();
     return 0;
 }
