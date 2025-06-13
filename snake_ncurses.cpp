@@ -1,5 +1,16 @@
 // snake_ncurses.cpp
 // Snake Game using ncurses with Growth/Poison Items, Gates, Scoreboard, and 4 Stages
+// – 벽 종류: WALL (게이트 eligible), IMMUNE_WALL (코너 등 게이트 금지)
+// – 뱀이 차지한 위치에 아이템 스폰 금지
+// – 아이템 즉시 리스폰 / 미사용 시 15초 후 재스폰
+// – 미션 목표: 길이>=4, +아이템>=3, -아이템>=2, 게이트>=1
+// – 게이트는 뱀보다 항상 위에 그리기
+// – 아이템 타이머 동기화
+// – GATE 타일을 추가해 텔레포트 시 즉사 방지
+// – 스테이지2 중앙행 벽 스킵
+// – 키 입력: 같은 방향 무시, 직각 방향 즉시 반영, 반대 방향은 즉시 종료
+// – 게이트 텔레포트: 진행 방향 우선 → 시계방향으로 차례대로
+// – 스테이지 종료 시 종합 점수 표시
 
 #include <ncurses.h>
 #include <vector>
@@ -8,274 +19,327 @@
 #include <random>
 #include <algorithm>
 
-// Map dimensions
-const int WIDTH = 21;
+// 맵 크기
+const int WIDTH  = 21;
 const int HEIGHT = 21;
 
-// Game settings
-const int INITIAL_LENGTH = 3;
-const int ITEM_LIFETIME_MS = 5000;  // 5 seconds
-const int TICK_MS = 1000;           // 1 second per tick
-const int TOTAL_STAGES = 4;
+// 게임 설정
+const int INITIAL_LENGTH   = 3;
+const int ITEM_LIFETIME_MS = 15000;  // 아이템 재스폰: 15초
+const int TICK_MS          = 1000;   // 1초당 한 틱
+const int TOTAL_STAGES     = 4;
 
-// Map tile codes
-enum Tile { EMPTY, WALL, SNAKE_HEAD, SNAKE_BODY, GROWTH_ITEM, POISON_ITEM, GATE };
-enum Direction { UP, DOWN, LEFT, RIGHT };
+// 타일 종류
+enum Tile {
+    EMPTY        = 0,
+    WALL         = 1,
+    IMMUNE_WALL  = 2,
+    GROWTH_ITEM  = 3,
+    POISON_ITEM  = 4,
+    GATE         = 5
+};
+
+// 이동 방향
+enum Direction { UP, RIGHT, DOWN, LEFT };
 
 struct Point {
     int x, y;
-    bool operator==(const Point& o) const { return x == o.x && y == o.y; }
+    bool operator==(const Point& o) const { return x==o.x && y==o.y; }
 };
 
-// Random engine
+// 랜덤 엔진
 static std::mt19937 rng{std::random_device{}()};
 
-// Check opposite directions
+// 반대 방향 체크
 bool isOpposite(Direction a, Direction b) {
-    return (a==UP && b==DOWN) || (a==DOWN && b==UP) ||
-           (a==LEFT && b==RIGHT) || (a==RIGHT && b==LEFT);
+    return (a==UP&&b==DOWN)||(a==DOWN&&b==UP)
+        ||(a==LEFT&&b==RIGHT)||(a==RIGHT&&b==LEFT);
 }
 
-// Return a random empty cell, or {-1,-1} if none
-Point randomEmpty(const std::vector<std::vector<int>>& map) {
+// 방향별 이동 벡터
+const int dx[4] = {0,1,0,-1};
+const int dy[4] = {-1,0,1,0};
+
+// 뱀과 겹치지 않는 빈 칸을 랜덤 반환
+Point randomEmpty(const std::vector<std::vector<int>>& map,
+                  const std::vector<Point>& snake) {
     std::vector<Point> empties;
-    for(int y=1; y<HEIGHT-1; ++y)
-        for(int x=1; x<WIDTH-1; ++x)
-            if(map[y][x] == EMPTY)
+    for(int y=1; y<HEIGHT-1; ++y){
+        for(int x=1; x<WIDTH-1; ++x){
+            if(map[y][x]==EMPTY &&
+               std::find(snake.begin(), snake.end(), Point{x,y})==snake.end())
                 empties.push_back({x,y});
+        }
+    }
     if(empties.empty()) return {-1,-1};
-    std::uniform_int_distribution<int> dist(0, (int)empties.size()-1);
-    return empties[dist(rng)];
+    std::uniform_int_distribution<int> d(0, (int)empties.size()-1);
+    return empties[d(rng)];
 }
 
-int main() {
-    initscr(); cbreak(); noecho();
-    keypad(stdscr, TRUE); curs_set(0);
+int main(){
+    // ncurses 초기화
+    initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+    curs_set(0);
     nodelay(stdscr, TRUE);
 
-    // Base map with walls
+    // 기본 맵 (외곽 벽, 코너는 IMMUNE_WALL)
     std::vector<std::vector<int>> baseMap(HEIGHT, std::vector<int>(WIDTH, EMPTY));
-    for(int x=0; x<WIDTH; ++x) {
-        baseMap[0][x] = baseMap[HEIGHT-1][x] = WALL;
+    for(int x=0; x<WIDTH; ++x){
+        bool corner = (x==0||x==WIDTH-1);
+        baseMap[0][x]        = corner ? IMMUNE_WALL : WALL;
+        baseMap[HEIGHT-1][x] = corner ? IMMUNE_WALL : WALL;
     }
-    for(int y=0; y<HEIGHT; ++y) {
-        baseMap[y][0] = baseMap[y][WIDTH-1] = WALL;
+    for(int y=1; y<HEIGHT-1; ++y){
+        baseMap[y][0]       = WALL;
+        baseMap[y][WIDTH-1] = WALL;
     }
 
-    // Main stage loop
-    for(int stage=1; stage<=TOTAL_STAGES; ++stage) {
-        // Copy base map
+    // 스테이지별 반복
+    for(int stage=1; stage<=TOTAL_STAGES; ++stage){
+        // 맵 복사 및 스테이지별 장애물 추가
         auto map = baseMap;
+        int sx=WIDTH/2, sy=HEIGHT/2;
+        if(stage==2){
+            for(int y=2; y<HEIGHT-2; ++y)
+                if(y!=sy) map[y][sx]=WALL;
+        } else if(stage==3){
+            for(int d=-3; d<=3; ++d){
+                map[sy+d][sx]=WALL;
+                map[sy][sx+d]=WALL;
+            }
+        } else if(stage==4){
+            for(int dy=-1; dy<=1; ++dy)
+            for(int dx=-1; dx<=1; ++dx)
+                if(abs(dx)+abs(dy)!=0)
+                    map[sy+dy][sx+dx]=WALL;
+        }
 
-        // Initialize snake at center
+        // 스테이지 시작 시각
+        auto t0 = std::chrono::steady_clock::now();
+
+        // — 뱀 초기화 — 横連続区間列挙方式
         std::vector<Point> snake;
-        int sx = WIDTH/2, sy = HEIGHT/2;
-        for(int i=0; i<INITIAL_LENGTH; ++i)
-            snake.push_back({sx-i, sy});
         Direction dir = RIGHT;
+        // 1) 横連続 빈칸 길이 INITIAL_LENGTH 후보 수집
+        std::vector<Point> heads;
+        for(int y=1; y<HEIGHT-1; ++y){
+            for(int x=INITIAL_LENGTH-1; x<WIDTH-1; ++x){
+                bool ok=true;
+                for(int i=0;i<INITIAL_LENGTH;++i){
+                    if(map[y][x-i]!=EMPTY){ ok=false; break; }
+                }
+                if(ok) heads.push_back({x,y});
+            }
+        }
+        // 2) 후보 중 랜덤 선택, 실패 시 중앙
+        if(heads.empty()){
+            for(int i=0;i<INITIAL_LENGTH;++i)
+                snake.push_back({sx-i, sy});
+        } else {
+            std::uniform_int_distribution<int> d(0, (int)heads.size()-1);
+            Point head = heads[d(rng)];
+            for(int i=0;i<INITIAL_LENGTH;++i)
+                snake.push_back({ head.x-i, head.y });
+        }
 
-        // Item & gate state
-        Point growthPos{-1,-1}, poisonPos{-1,-1};
+        // 게이트 배치 (WALL 중 랜덤 2곳)
         Point gateA{-1,-1}, gateB{-1,-1};
-
-        // Spawn initial gate immediately
         {
             std::vector<Point> walls;
-            // scan entire baseMap for WALL tiles
-            for(int y=0; y<HEIGHT; ++y) {
-                for(int x=0; x<WIDTH; ++x) {
-                    if(baseMap[y][x] == WALL) {
-                        walls.push_back({x,y});
-                    }
-                }
-            }
-            if(walls.size() >= 2) {
-                std::shuffle(walls.begin(), walls.end(), rng);
-                gateA = walls[0];
-                gateB = walls[1];
-                map[gateA.y][gateA.x] = GATE;
-                map[gateB.y][gateB.x] = GATE;
+            for(int y=0;y<HEIGHT;++y)
+            for(int x=0;x<WIDTH;++x)
+                if(map[y][x]==WALL) walls.push_back({x,y});
+            std::shuffle(walls.begin(), walls.end(), rng);
+            if(walls.size()>=2){
+                gateA=walls[0]; gateB=walls[1];
+                map[gateA.y][gateA.x]=GATE;
+                map[gateB.y][gateB.x]=GATE;
             }
         }
 
-        int growthCount = 0, poisonCount = 0, gateCount = 0;
-        int maxLength = (int)snake.size();
-        bool running = true, missionComplete = false;
+        // 아이템 즉시 스폰
+        Point growth = randomEmpty(map, snake);
+        if(growth.x>=0) map[growth.y][growth.x]=GROWTH_ITEM;
+        Point poison = randomEmpty(map, snake);
+        if(poison.x>=0) map[poison.y][poison.x]=POISON_ITEM;
+        auto lastG = t0, lastP = t0;
 
-        auto lastGrowth = std::chrono::steady_clock::now();
-        auto lastPoison = lastGrowth;
-        auto startTime = std::chrono::steady_clock::now();
+        int gc=0, pc=0, gtc=0;
+        int maxLen = (int)snake.size();
+        bool running=true, done=false;
 
-        // Game loop for this stage
-        while(running) {
+        // — 메인 게임 루프 —
+        while(running){
             auto now = std::chrono::steady_clock::now();
 
-            // Input handling
+            // 1) 입력 처리: 이번 틱의 마지막 키만 사용
             int ch = getch();
-            Direction newDir = dir;
-            if(ch == KEY_UP)    newDir = UP;
-            else if(ch == KEY_DOWN)  newDir = DOWN;
-            else if(ch == KEY_LEFT)  newDir = LEFT;
-            else if(ch == KEY_RIGHT) newDir = RIGHT;
-            else if(ch == 'q') { running = false; break; }
-
-            if(newDir != dir) {
-                if(isOpposite(dir, newDir)) { running = false; break; }
-                dir = newDir;
+            if(ch!=ERR){
+                int tmp;
+                while((tmp=getch())!=ERR) ch=tmp;
+            }
+            Direction nd = dir;
+            if     (ch==KEY_UP)    nd=UP;
+            else if(ch==KEY_RIGHT) nd=RIGHT;
+            else if(ch==KEY_DOWN)  nd=DOWN;
+            else if(ch==KEY_LEFT)  nd=LEFT;
+            else if(ch=='q'){ running=false; break; }
+            if(nd!=dir){
+                if(isOpposite(dir, nd)){ running=false; break; }
+                dir=nd;
             }
 
-            // Respawn Growth Item every 5 seconds
-            if(std::chrono::duration_cast<std::chrono::milliseconds>(now - lastGrowth).count() >= ITEM_LIFETIME_MS) {
-                if(growthPos.x >= 0) {
-                    map[growthPos.y][growthPos.x] = EMPTY;
-                }
-                growthPos = randomEmpty(map);
-                if(growthPos.x >= 0) {
-                    map[growthPos.y][growthPos.x] = GROWTH_ITEM;
-                }
-                lastGrowth = now;
+            // 2) 아이템 재스폰 (만료 시)
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastG).count() >= ITEM_LIFETIME_MS){
+                if(growth.x>=0) map[growth.y][growth.x]=EMPTY;
+                growth = randomEmpty(map, snake);
+                if(growth.x>=0) map[growth.y][growth.x]=GROWTH_ITEM;
+                lastG=now;
+            }
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastP).count() >= ITEM_LIFETIME_MS){
+                if(poison.x>=0) map[poison.y][poison.x]=EMPTY;
+                poison = randomEmpty(map, snake);
+                if(poison.x>=0) map[poison.y][poison.x]=POISON_ITEM;
+                lastP=now;
             }
 
-            // Respawn Poison Item every 5 seconds
-            if(std::chrono::duration_cast<std::chrono::milliseconds>(now - lastPoison).count() >= ITEM_LIFETIME_MS) {
-                if(poisonPos.x >= 0) {
-                    map[poisonPos.y][poisonPos.x] = EMPTY;
-                }
-                poisonPos = randomEmpty(map);
-                if(poisonPos.x >= 0) {
-                    map[poisonPos.y][poisonPos.x] = POISON_ITEM;
-                }
-                lastPoison = now;
-            }
-
-            // Move snake head
-            Point head = snake.front();
-            Point nh = head;
-            switch(dir) {
-                case UP:    nh.y--; break;
-                case DOWN:  nh.y++; break;
-                case LEFT:  nh.x--; break;
-                case RIGHT: nh.x++; break;
-            }
-
-            // Boundary check
-            if(nh.x < 0 || nh.x >= WIDTH || nh.y < 0 || nh.y >= HEIGHT) {
-                running = false; break;
-            }
-
+            // 3) 머리 이동
+            Point head = snake.front(), nh=head;
+            nh.x += dx[dir]; nh.y += dy[dir];
+            if(nh.x<0||nh.x>=WIDTH||nh.y<0||nh.y>=HEIGHT) break;
             int tile = map[nh.y][nh.x];
+            if(tile==WALL||tile==IMMUNE_WALL) break;
+            if(std::find(snake.begin(),snake.end(),nh)!=snake.end()) break;
 
-            // Wall collision
-            if(tile == WALL) { running = false; break; }
-
-            // Self collision
-            if(std::find(snake.begin(), snake.end(), nh) != snake.end()) {
-                running = false; break;
-            }
-
-            // Gate teleport
-            if(tile == GATE) {
-                gateCount++;
-                nh = (nh == gateA ? gateB : gateA);
-            }
-
-            // Item pick-up
-            if(tile == GROWTH_ITEM) {
-                snake.insert(snake.begin(), nh);
-                growthCount++;
-            }
-            else if(tile == POISON_ITEM) {
-                snake.insert(snake.begin(), nh);
-                if(snake.size() > 2) {
-                    snake.pop_back();
-                    snake.pop_back();
+            // 4) 게이트 텔레포트
+            if(tile==GATE){
+                gtc++;
+                Point exitGate = (nh==gateA?gateB:gateA);
+                bool found=false;
+                for(int k=0;k<4;++k){
+                    Direction d2 = Direction((dir+k)%4);
+                    int ex=exitGate.x+dx[d2], ey=exitGate.y+dy[d2];
+                    if(ex>=0&&ex<WIDTH&&ey>=0&&ey<HEIGHT){
+                        int t2=map[ey][ex];
+                        if(t2!=WALL&&t2!=IMMUNE_WALL){
+                            nh={ex,ey}; dir=d2; found=true; break;
+                        }
+                    }
                 }
-                poisonCount++;
-                if(snake.size() < INITIAL_LENGTH) {
-                    running = false; break;
-                }
+                if(!found) break;
             }
-            else {
-                // normal move
+
+            // 5) 아이템 먹기 / 성장·감소
+            if(tile==GROWTH_ITEM){
+                map[nh.y][nh.x]=EMPTY;
+                snake.insert(snake.begin(), nh); gc++;
+                growth=randomEmpty(map, snake);
+                if(growth.x>=0) map[growth.y][growth.x]=GROWTH_ITEM;
+                lastG=now; lastP=now;
+            }
+            else if(tile==POISON_ITEM){
+                map[nh.y][nh.x]=EMPTY;
+                snake.insert(snake.begin(), nh);
+                if(snake.size()>2){ snake.pop_back(); snake.pop_back(); }
+                pc++;
+                poison=randomEmpty(map, snake);
+                if(poison.x>=0) map[poison.y][poison.x]=POISON_ITEM;
+                lastP=now; lastG=now;
+                if(snake.size()<INITIAL_LENGTH) break;
+            }
+            else{
                 snake.insert(snake.begin(), nh);
                 snake.pop_back();
             }
-            maxLength = std::max(maxLength, (int)snake.size());
+            maxLen = std::max(maxLen, (int)snake.size());
 
-            // Check mission success
-            if((int)snake.size() >= 10 &&
-               growthCount >= 5 &&
-               poisonCount >= 2 &&
-               gateCount >= 1) 
-            {
-                missionComplete = true;
-                running = false;
+            // 6) 미션 달성 체크
+            if((int)snake.size()>=4 && gc>=3 && pc>=2 && gtc>=1){
+                done=true; break;
             }
 
-            // Draw everything
+            // 7) 그리기
             clear();
-            // Map tiles
-            for(int y=0; y<HEIGHT; ++y) {
-                for(int x=0; x<WIDTH; ++x) {
-                    char c = ' ';
-                    switch(map[y][x]) {
-                        case WALL:        c = '#'; break;
-                        case GROWTH_ITEM: c = '+'; break;
-                        case POISON_ITEM: c = '-'; break;
-                        case GATE:        c = 'G'; break;
-                        default:          c = ' '; break;
-                    }
-                    mvaddch(y, x, c);
+            // 맵/아이템/게이트
+            for(int y=0;y<HEIGHT;++y)for(int x=0;x<WIDTH;++x){
+                char c=' ';
+                switch(map[y][x]){
+                case WALL:        c='#'; break;
+                case IMMUNE_WALL: c='#'; break;
+                case GROWTH_ITEM: c='+'; break;
+                case POISON_ITEM: c='-'; break;
+                case GATE:        c='G'; break;
                 }
+                mvaddch(y,x,c);
             }
-            // Snake
+            // 스네이크
             mvaddch(snake.front().y, snake.front().x, 'O');
-            for(size_t i=1; i<snake.size(); ++i) {
+            for(size_t i=1;i<snake.size();++i)
                 mvaddch(snake[i].y, snake[i].x, 'o');
-            }
-            // Scoreboard & status
-            int elapsed = (int)std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
-            int infoX = WIDTH + 2;
-            mvprintw(1, infoX, "Stage %d/%d", stage, TOTAL_STAGES);
-            mvprintw(2, infoX, "Length: %2d/%2d", (int)snake.size(), maxLength);
-            mvprintw(3, infoX, "+: %2d", growthCount);
-            mvprintw(4, infoX, "-: %2d", poisonCount);
-            mvprintw(5, infoX, "G: %2d", gateCount);
-            mvprintw(7, infoX, "Time: %2d", elapsed);
-            mvprintw(9, infoX, "Mission");
-            mvprintw(10,infoX, "Len>=10: %c", snake.size()>=10 ? 'v' : ' ');
-            mvprintw(11,infoX, "+>=5: %c", growthCount>=5 ? 'v' : ' ');
-            mvprintw(12,infoX, "->=2: %c", poisonCount>=2 ? 'v' : ' ');
-            mvprintw(13,infoX, "G>=1: %c", gateCount>=1 ? 'v' : ' ');
+            // 스코어보드
+            int elapsed = (int)std::chrono::duration_cast<std::chrono::seconds>(now-t0).count();
+            int ix=WIDTH+2;
+            mvprintw(1,ix,"Stage %d/%d",stage,TOTAL_STAGES);
+            mvprintw(2,ix,"Len:%2d/%2d",(int)snake.size(),maxLen);
+            mvprintw(3,ix,"+: %2d",gc);
+            mvprintw(4,ix,"-: %2d",pc);
+            mvprintw(5,ix,"G: %2d",gtc);
+            mvprintw(7,ix,"Time:%2d",elapsed);
+            mvprintw(9,ix,"Mission");
+            mvprintw(10,ix,"L>=4:%c",snake.size()>=4?'v':' ');
+            mvprintw(11,ix,"+>=3:%c",gc>=3?'v':' ');
+            mvprintw(12,ix,"->=2:%c",pc>=2?'v':' ');
+            mvprintw(13,ix,"G>=1:%c",gtc>=1?'v':' ');
             refresh();
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(TICK_MS));
+            // 8) 남은 틱 동안 직각 키 즉시 반영
+            auto start = std::chrono::steady_clock::now();
+            while(running){
+                auto passed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now()-start).count();
+                if(passed>=TICK_MS) break;
+                int c2 = getch();
+                if(c2!=ERR){
+                    Direction nd2=dir;
+                    if     (c2==KEY_UP)    nd2=UP;
+                    else if(c2==KEY_RIGHT) nd2=RIGHT;
+                    else if(c2==KEY_DOWN)  nd2=DOWN;
+                    else if(c2==KEY_LEFT)  nd2=LEFT;
+                    else if(c2=='q'){ running=false; break; }
+                    if(nd2!=dir){
+                        if(isOpposite(dir,nd2)){ running=false; break; }
+                        dir=nd2; break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
         }
 
-        // Stage end message
+        // 스테이지 종료 화면 (총점 표시)
         clear();
-        if(missionComplete) {
-            mvprintw(HEIGHT/2, (WIDTH/2)-8, "Stage %d Complete!", stage);
-        } else {
-            mvprintw(HEIGHT/2, (WIDTH/2)-5, "Game Over");
-        }
-        mvprintw(HEIGHT/2+1, (WIDTH/2)-8, "Press any key");
-        nodelay(stdscr, FALSE);
+        int cy=HEIGHT/2-5, cx=(WIDTH-22)/2;
+        mvprintw(cy,  cx,(done?" Stage %d Complete! ":"      Game Over  "),stage);
+        mvprintw(cy+1,cx,"----------------------");
+        mvprintw(cy+2,cx," Length   : %2d / %2d", (int)snake.size(), maxLen);
+        mvprintw(cy+3,cx," Growth   : %2d", gc);
+        mvprintw(cy+4,cx," Poison   : %2d", pc);
+        mvprintw(cy+5,cx," Gate use : %2d", gtc);
+        int elapsed_total = (int)std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now()-t0).count();
+        mvprintw(cy+6,cx," Time (s) : %2d", elapsed_total);
+        mvprintw(cy+7,cx,"----------------------");
+        int totalScore = gc + pc + gtc;
+        mvprintw(cy+8,cx," Total    : %2d", totalScore);
+        mvprintw(cy+10,cx,"Press any key to continue");
+        nodelay(stdscr,FALSE);
         getch();
-        nodelay(stdscr, TRUE);
-        if(!missionComplete) break;
+        nodelay(stdscr,TRUE);
+        if(!done) break;
     }
 
     endwin();
     return 0;
 }
-
-/*
-Compile & Run:
-    g++ -g -std=c++17 snake_ncurses.cpp -lncurses -o snake
-    ./snake
-
-Controls:
-    Arrow keys - Move
-    q          - Quit immediately
-*/
