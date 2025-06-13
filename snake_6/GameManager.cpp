@@ -141,7 +141,7 @@ void GameManager::renderScoreBoard(const Snake& snake) const {
     mvprintw(11, offsetX, "G: 1 (%s)", (gateUseCount >= 1 ? "v" : " "));
 }
 bool GameManager::checkMissionClear(const Snake& snake) const {
-    return growthCount >= 3 &&
+    return growthCount >= 3 cd&&
            poisonCount >= 2 &&
            gateUseCount >= 1;
 }
