@@ -41,34 +41,41 @@ void GameManager::run() {
         map.render();
         snake.render();
         renderScoreBoard(snake);
-        mvprintw(13, 25, "Stage%d 2second later start ..", currentStage);
+        mvprintw(15, 30, "Stage%d 2second later start ..", currentStage);
         refresh();
         sleep(2);
 
         bool gameOver = false;
 
         while (!gameOver) {
-            clear();
-            map.render();
-            snake.render();
-            renderScoreBoard(snake);
+		clear();
+		map.render();
+		snake.render();
+		renderScoreBoard(snake);
+		int ch = getch();
+		while (ch != ERR) {
+			Direction currentDir = snake.getDirection();
+			Direction inputDir = currentDir;
+			switch (ch) {
+				case KEY_UP:    inputDir = UP; break;
+				case KEY_DOWN:  inputDir = DOWN; break;
+				case KEY_LEFT:  inputDir = LEFT; break;
+				case KEY_RIGHT: inputDir = RIGHT; break;
+				default:        inputDir = currentDir; break;
+			}
 
-            int ch = getch();
-            if (ch != ERR) {
-                Direction currentDir = snake.getDirection();
-                Direction inputDir;
-                switch (ch) {
-                    case KEY_UP:    inputDir = UP; break;
-                    case KEY_DOWN:  inputDir = DOWN; break;
-                    case KEY_LEFT:  inputDir = LEFT; break;
-                    case KEY_RIGHT: inputDir = RIGHT; break;
-                    default:        inputDir = currentDir; break;
-                }
-
-                if (inputDir != currentDir) {
-                    if (!snake.updateDirection(ch)) break;
-                }
+			if (inputDir != currentDir) {
+				bool ok = snake.updateDirection(ch);
+				if (!ok) {
+					// 반대 방향 입력시 종료 처리
+					gameOver = true;  // bool gameOver 변수 있어야 함
+					break;
+				}
+				break;  // 방향 변경 성공 시 루프 탈출
+			}
+			ch = getch();
             }
+
 
             Snake::MoveResult result = snake.move(map);
 
@@ -93,12 +100,12 @@ void GameManager::run() {
 
             if (checkMissionClear(snake)) {
                 if (currentStage >= 5) {
-                    mvprintw(15, 25, "All stages cleared! Congrats!");
+                    mvprintw(16, 30, "All stages cleared! Congrats!");
                     refresh();
                     sleep(3);
                     gameOver = true;
                 } else {
-                    mvprintw(13, 25, "Mission Completed! Press 'Y' to continue.");
+                    mvprintw(17, 30, "Mission Completed! Press 'Y' to continue.");
                     refresh();
 
                     int input;
@@ -107,7 +114,7 @@ void GameManager::run() {
                         usleep(100000);
                     } while (input != 'Y' && input != 'y');
 
-                    mvprintw(16, 25, "Loading next stage...");
+                    mvprintw(17, 25, "Loading next stage...");
                     refresh();
                     sleep(1);
 
@@ -134,7 +141,7 @@ void GameManager::run() {
                     map.render();
                     snake.render();
                     renderScoreBoard(snake);
-                    mvprintw(12, 25, "Stage%d 2second later start ..", currentStage);
+                    mvprintw(15, 30, "Stage%d 2second later start ..", currentStage);
                     refresh();
                     sleep(2);
                 }
@@ -202,21 +209,38 @@ void GameManager::generateGates() {
 }
 
 void GameManager::renderScoreBoard(const Snake& snake) const {
-    int offsetX = 25;  // 맵 오른쪽 옆에 출력
+    int offsetX = 30;
+    int width = 12;
+    int height = 14;
 
+    // 사각형 세로줄
+    for (int y = 0; y < height; ++y) {
+    	if(y!=7){
+		mvprintw(y, offsetX, ".");
+		mvprintw(y, offsetX + width, ".");
+	}
+    }
+
+    // 가로줄
+    mvprintw(0, offsetX, ".............");
+    mvprintw(6, offsetX, ".............");
+    mvprintw(8, offsetX, ".............");
+    mvprintw(13, offsetX, ".............");
+
+    // 내용 출력
     int currentLen = snake.getLength();
+    mvprintw(1, offsetX + 1, "Score Board");
+    mvprintw(2, offsetX + 1, "B: %d / %d", currentLen, maxLength);
+    mvprintw(3, offsetX + 1, "+: %d", growthCount);
+    mvprintw(4, offsetX + 1, "-: %d", poisonCount);
+    mvprintw(5, offsetX + 1, "G: %d", gateUseCount);
 
-    mvprintw(1, offsetX, "Score Board");
-    mvprintw(2, offsetX, "B: %d / %d", currentLen, maxLength);
-    mvprintw(3, offsetX, "+: %d", growthCount);
-    mvprintw(4, offsetX, "-: %d", poisonCount);
-    mvprintw(5, offsetX, "G: %d", gateUseCount);
-
-    mvprintw(7, offsetX, "Mission");
-    mvprintw(9, offsetX, "+: 3 (%s)", (growthCount >= 3 ? "v" : " "));
-    mvprintw(10, offsetX, "-: 2 (%s)", (poisonCount >= 2 ? "v" : " "));
-    mvprintw(11, offsetX, "G: 1 (%s)", (gateUseCount >= 1 ? "v" : " "));
+    mvprintw(9, offsetX + 1, "Mission");
+    mvprintw(10, offsetX + 1, "+: 3 (%s)", (growthCount >= 3 ? "v" : " "));
+    mvprintw(11, offsetX + 1, "-: 2 (%s)", (poisonCount >= 2 ? "v" : " "));
+    mvprintw(12, offsetX + 1, "G: 1 (%s)", (gateUseCount >= 1 ? "v" : " "));
 }
+
 bool GameManager::checkMissionClear(const Snake& snake) const {
     return growthCount >= 3 &&
            poisonCount >= 2 &&
