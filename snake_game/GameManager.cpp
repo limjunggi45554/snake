@@ -7,28 +7,6 @@
 #include <ctime>
 #include <iostream>
 
-void GameManager::addItemAvoidSnake(int itemType, const Snake& snake) {
-    auto snakeBody = snake.getBody(); // std::deque<std::pair<int,int>> 형태로 뱀 몸통 좌표 반환
-    int y, x;
-    for (int tries = 0; tries < 100; ++tries) {
-        y = rand() % map.getHeight();
-        x = rand() % map.getWidth();
-        if (map.getValue(y, x) == EMPTY) {
-            bool onSnake = false;
-            for (auto& segment : snakeBody) {
-                if (segment.first == y && segment.second == x) {
-                    onSnake = true;
-                    break;
-                }
-            }
-            if (!onSnake) {
-                map.setValue(y, x, itemType);
-                break;
-            }
-        }
-    }
-}
-
 void GameManager::run() {
     initscr();
     noecho();
@@ -109,10 +87,12 @@ void GameManager::run() {
                 case Snake::MOVE_GROWTH:
                     growthCount++;
                     lastGrowthItemTime = time(nullptr);
+                    addItemAvoidSnake(GROWTH_ITEM, snake);  // 즉시 새 아이템 생성
                     break;
                 case Snake::MOVE_POISON:
                     poisonCount++;
                     lastPoisonItemTime = time(nullptr);
+                    addItemAvoidSnake(POISON_ITEM, snake);  // 즉시 새 아이템 생성
                     break;
                 case Snake::MOVE_GATE:
                     gateUseCount++;
@@ -277,3 +257,29 @@ bool GameManager::checkMissionClear(const Snake& snake) const {
            poisonCount >= 2 &&
            gateUseCount >= 1;
 }
+
+void GameManager::addItemAvoidSnake(int itemType, const Snake& snake) {
+    int y, x;
+    const auto& body = snake.getBody();
+
+    while (true) {
+        y = rand() % map.getHeight();
+        x = rand() % map.getWidth();
+
+        if (map.getValue(y, x) != EMPTY)
+            continue;
+
+        bool overlap = false;
+        for (const auto& segment : body) {
+            if (segment.first == y && segment.second == x) {
+                overlap = true;
+                break;
+            }
+        }
+        if (!overlap) break;
+    }
+
+    map.setValue(y, x, itemType);
+}
+
+

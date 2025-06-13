@@ -52,11 +52,9 @@ Snake::MoveResult Snake::move(Map& map) {
 
     if (cell == GROWTH_ITEM) {
         map.setValue(newY, newX, EMPTY);
-        map.addItem(GROWTH_ITEM);
         return MOVE_GROWTH;
     } else if (cell == POISON_ITEM) {
         map.setValue(newY, newX, EMPTY);
-        map.addItem(POISON_ITEM);
         if (body.size() > 1) body.pop_back();
         if (body.size() > 1) body.pop_back();
         if (body.size() < 3)
