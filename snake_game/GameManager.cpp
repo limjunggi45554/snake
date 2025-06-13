@@ -37,6 +37,13 @@ void GameManager::run() {
         map.addItem(POISON_ITEM);
         generateGates();
         snake.setGateInfo(gate1, gate2);
+        clear();
+        map.render();
+        snake.render();
+        renderScoreBoard(snake);
+        mvprintw(13, 25, "Stage%d 2second later start ..", currentStage);
+        refresh();
+        sleep(2);
 
         bool gameOver = false;
 
@@ -91,7 +98,7 @@ void GameManager::run() {
                     sleep(3);
                     gameOver = true;
                 } else {
-                    mvprintw(15, 25, "Mission Completed! Press 'Y' to continue.");
+                    mvprintw(13, 25, "Mission Completed! Press 'Y' to continue.");
                     refresh();
 
                     int input;
@@ -122,6 +129,14 @@ void GameManager::run() {
 
                     frame = 0;
                     startTime = time(nullptr);
+                    
+                    clear();
+                    map.render();
+                    snake.render();
+                    renderScoreBoard(snake);
+                    mvprintw(12, 25, "Stage%d 2second later start ..", currentStage);
+                    refresh();
+                    sleep(2);
                 }
             }
 
