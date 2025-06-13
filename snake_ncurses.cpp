@@ -3,7 +3,7 @@
 // – 벽 종류: WALL (게이트 eligible), IMMUNE_WALL (코너 등 게이트 금지)
 // – 뱀이 차지한 위치에 아이템 스폰 금지
 // – 아이템 즉시 리스폰 / 미사용 시 15초 후 재스폰
-// – 미션 목표: 길이>=4, +아이템>=3, -아이템>=2, 게이트>=1
+// – 미션 목표: 길이>=4, +아이템>=1, -아이템>=1, 게이트>=1
 // – 게이트는 뱀보다 항상 위에 그리기
 // – 아이템 타이머 동기화
 // – GATE 타일을 추가해 텔레포트 시 즉사 방지
@@ -134,7 +134,7 @@ int main(){
                 if(ok) heads.push_back({x,y});
             }
         }
-        // 2) 후보 중 랜덤 선택, 실패 시 중앙
+        // 2) 후보 중 랜덤 선택, 없으면 중앙
         if(heads.empty()){
             for(int i=0;i<INITIAL_LENGTH;++i)
                 snake.push_back({sx-i, sy});
@@ -256,14 +256,13 @@ int main(){
             }
             maxLen = std::max(maxLen, (int)snake.size());
 
-            // 6) 미션 달성 체크
-            if((int)snake.size()>=4 && gc>=3 && pc>=2 && gtc>=1){
+            // 6) 미션 달성 체크 (아이템 1개로 완화)
+            if((int)snake.size()>=4 && gc>=1 && pc>=1 && gtc>=1){
                 done=true; break;
             }
 
             // 7) 그리기
             clear();
-            // 맵/아이템/게이트
             for(int y=0;y<HEIGHT;++y)for(int x=0;x<WIDTH;++x){
                 char c=' ';
                 switch(map[y][x]){
@@ -275,11 +274,9 @@ int main(){
                 }
                 mvaddch(y,x,c);
             }
-            // 스네이크
             mvaddch(snake.front().y, snake.front().x, 'O');
             for(size_t i=1;i<snake.size();++i)
                 mvaddch(snake[i].y, snake[i].x, 'o');
-            // 스코어보드
             int elapsed = (int)std::chrono::duration_cast<std::chrono::seconds>(now-t0).count();
             int ix=WIDTH+2;
             mvprintw(1,ix,"Stage %d/%d",stage,TOTAL_STAGES);
@@ -290,8 +287,8 @@ int main(){
             mvprintw(7,ix,"Time:%2d",elapsed);
             mvprintw(9,ix,"Mission");
             mvprintw(10,ix,"L>=4:%c",snake.size()>=4?'v':' ');
-            mvprintw(11,ix,"+>=3:%c",gc>=3?'v':' ');
-            mvprintw(12,ix,"->=2:%c",pc>=2?'v':' ');
+            mvprintw(11,ix,"+>=1:%c",gc>=1?'v':' ');
+            mvprintw(12,ix,"->=1:%c",pc>=1?'v':' ');
             mvprintw(13,ix,"G>=1:%c",gtc>=1?'v':' ');
             refresh();
 
