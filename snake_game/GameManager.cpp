@@ -112,7 +112,7 @@ void GameManager::run() {
                     sleep(3);
                     gameOver = true;
                 } else {
-                    mvprintw(17, 30, "Mission Completed! Press 'Y' to continue.");
+                    mvprintw(16, 30, "Mission Completed! Press 'Y' to continue.");
                     refresh();
 
                     int input;
@@ -121,7 +121,7 @@ void GameManager::run() {
                         usleep(100000);
                     } while (input != 'Y' && input != 'y');
 
-                    mvprintw(17, 25, "Loading next stage...");
+                    mvprintw(17, 30, "Loading next stage...");
                     refresh();
                     sleep(1);
 
