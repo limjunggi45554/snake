@@ -97,6 +97,13 @@ void GameManager::run() {
                 default:
                     break;
             }
+            if (snake.getLength() > maxLength) {
+            	mvprintw(18, 30, "Max length reached! Game Over!");
+            	refresh();
+            	sleep(1);
+            	gameOver = true;
+            }
+
 
             if (checkMissionClear(snake)) {
                 if (currentStage >= 5) {
